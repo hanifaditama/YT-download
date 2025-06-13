@@ -7,24 +7,23 @@ from tkinter.ttk import Combobox, Progressbar
 import os
 import threading
 
+
 def is_yt_dlp_installed():
     return shutil.which("yt-dlp") is not None
 
+
 def install_or_update_yt_dlp():
-    if is_yt_dlp_installed():
-        try:
+    try:
+        if is_yt_dlp_installed():
             subprocess.run(["yt-dlp", "-U"], check=True)
-        except subprocess.CalledProcessError:
-            print("Failed to update yt-dlp.")
-    else:
-        try:
+        else:
             subprocess.run([sys.executable, "-m", "pip", "install", "-U", "yt-dlp"], check=True)
-        except subprocess.CalledProcessError:
-            print("yt-dlp installation failed.")
+    except subprocess.CalledProcessError:
+        print("Failed to install or update yt-dlp.")
+
 
 def run_yt_dlp_command(cmd, on_progress_update):
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-
     for line in process.stdout:
         if "[download]" in line and "%" in line:
             try:
@@ -36,15 +35,20 @@ def run_yt_dlp_command(cmd, on_progress_update):
     process.wait()
     return process.returncode == 0
 
-def download_videos(links, start_time, end_time, quality, format_type, output_path, on_progress_update, on_finish):
-    section = f"*{start_time}-{end_time}" if start_time and end_time else ""
+
+def hms_string(hour, minute, second):
+    return f"{int(hour):02}:{int(minute):02}:{int(second):02}"
+
+
+def download_videos(links, start_hms, end_hms, quality_code, format_type, output_path, on_progress_update, on_finish):
+    section = f"*{start_hms}-{end_hms}" if start_hms and end_hms else ""
     output_template = os.path.join(output_path, "%(title).70s.%(ext)s")
 
     for url in links:
         cmd = [
             "yt-dlp",
             url,
-            "-f", quality,
+            "-f", quality_code,
             "-o", output_template,
             "--no-overwrites"
         ]
@@ -61,6 +65,7 @@ def download_videos(links, start_time, end_time, quality, format_type, output_pa
 
     on_finish()
 
+
 def start_gui():
     def browse_output():
         path = filedialog.askdirectory()
@@ -76,6 +81,10 @@ def start_gui():
         progress_bar["value"] = 0
         download_btn.config(state="disabled")
 
+        start_time = hms_string(start_hour.get(), start_min.get(), start_sec.get())
+        end_time = hms_string(end_hour.get(), end_min.get(), end_sec.get())
+        quality_code = quality_map[quality_var.get()]
+
         def update_progress(p):
             progress_bar["value"] = p
             root.update_idletasks()
@@ -87,31 +96,46 @@ def start_gui():
 
         threading.Thread(
             target=download_videos,
-            args=(urls, start_var.get(), end_var.get(), quality_var.get(),
-                  format_var.get(), output_var.get(), update_progress, download_complete),
+            args=(urls, start_time, end_time, quality_code, format_var.get(), output_var.get(), update_progress, download_complete),
             daemon=True
         ).start()
 
     root = tk.Tk()
     root.title("YouTube Downloader")
-    root.geometry("600x600")
+    root.geometry("600x700")
     root.resizable(False, False)
 
     tk.Label(root, text="YouTube Links (one per line):").pack(pady=(10, 0))
     links_text = scrolledtext.ScrolledText(root, width=70, height=8)
     links_text.pack()
 
-    tk.Label(root, text="Start Time (mm:ss):").pack(pady=(10, 0))
-    start_var = tk.StringVar()
-    tk.Entry(root, textvariable=start_var, width=20).pack()
+    def time_input_frame(label_text):
+        frame = tk.Frame(root)
+        tk.Label(frame, text=label_text).pack()
+        hour = tk.Spinbox(frame, from_=0, to=23, width=5)
+        minute = tk.Spinbox(frame, from_=0, to=59, width=5)
+        second = tk.Spinbox(frame, from_=0, to=59, width=5)
+        hour.pack(side="left", padx=2)
+        minute.pack(side="left", padx=2)
+        second.pack(side="left", padx=2)
+        frame.pack(pady=5)
+        return hour, minute, second
 
-    tk.Label(root, text="End Time (mm:ss):").pack()
-    end_var = tk.StringVar()
-    tk.Entry(root, textvariable=end_var, width=20).pack()
+    start_hour, start_min, start_sec = time_input_frame("Start Time (HH:MM:SS)")
+    end_hour, end_min, end_sec = time_input_frame("End Time (HH:MM:SS)")
 
-    tk.Label(root, text="Quality (e.g. best, 22, 18):").pack(pady=(10, 0))
-    quality_var = tk.StringVar(value="best")
-    Combobox(root, textvariable=quality_var, values=["best", "22", "18", "140"]).pack()
+    tk.Label(root, text="Video Quality:").pack(pady=(10, 0))
+    quality_var = tk.StringVar(value="Best Quality")
+    quality_map = {
+        "Best Quality": "best",
+        "1440p (2K)": "137",
+        "1080p (HD)": "22",
+        "720p (HD)": "18",
+        "480p": "135",
+        "360p": "134",
+        "240p": "133"
+    }
+    Combobox(root, textvariable=quality_var, values=list(quality_map.keys())).pack()
 
     tk.Label(root, text="Format:").pack(pady=(10, 0))
     format_var = tk.StringVar(value="Video")
@@ -131,6 +155,7 @@ def start_gui():
     download_btn.pack(pady=10)
 
     root.mainloop()
+
 
 if __name__ == "__main__":
     install_or_update_yt_dlp()
