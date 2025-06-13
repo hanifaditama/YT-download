@@ -50,6 +50,7 @@ def download_videos(links, start_hms, end_hms, quality_code, format_type, output
             url,
             "-f", quality_code,
             "-o", output_template,
+            "--merge-output-format", "mp4",
             "--no-overwrites"
         ]
 
@@ -127,9 +128,9 @@ def start_gui():
     tk.Label(root, text="Video Quality:").pack(pady=(10, 0))
     quality_var = tk.StringVar(value="Best Quality")
     quality_map = {
-        "Best Quality": "best",
-        "1440p (2K)": "137",
-        "1080p (HD)": "22",
+        "Best Quality": "bestvideo+bestaudio",
+        "1440p (2K)": "137+bestaudio",
+        "1080p (HD)": "22+bestaudio",
         "720p (HD)": "18",
         "480p": "135",
         "360p": "134",
